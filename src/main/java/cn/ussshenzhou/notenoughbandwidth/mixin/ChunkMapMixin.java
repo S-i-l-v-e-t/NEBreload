@@ -12,6 +12,7 @@ import org.apache.commons.lang3.mutable.MutableObject;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -148,24 +149,38 @@ public abstract class ChunkMapMixin {
         nebHandleChunkTracking(player, pos, packetHolder, wasInRange, isInRange);
     }
 
-    @Redirect(
-            method = "lambda$setViewDistance$51(Lnet/minecraft/world/level/ChunkPos;ILorg/apache/commons/lang3/mutable/MutableObject;Lnet/minecraft/server/level/ServerPlayer;)V",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/server/level/ChunkMap;updateChunkTracking(Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/world/level/ChunkPos;Lorg/apache/commons/lang3/mutable/MutableObject;ZZ)V"
-            )
+    @Unique
+    private static final ThreadLocal<Boolean> NEB_IN_SET_VIEW_DISTANCE = ThreadLocal.withInitial(() -> false);
+
+    @Inject(method = "setViewDistance", at = @At("HEAD"))
+    private void nebOnSetViewDistanceHead(int viewDistance, CallbackInfo ci) {
+        NEB_IN_SET_VIEW_DISTANCE.set(true);
+    }
+    @Inject(method = "setViewDistance", at = @At("RETURN"))
+    private void nebOnSetViewDistanceReturn(int viewDistance, CallbackInfo ci) {
+        NEB_IN_SET_VIEW_DISTANCE.set(false);
+    }
+    @Inject(
+            method = "updateChunkTracking",
+            at = @At("HEAD"),
+            cancellable = true
     )
-    private void nebRedirectUpdateChunkTrackingInSetViewDistanceLambda(
-            ChunkMap instance,
+    private void nebContextualUpdateChunkTracking(
             ServerPlayer player,
             ChunkPos pos,
             MutableObject<ClientboundLevelChunkWithLightPacket> packetHolder,
             boolean wasInRange,
-            boolean isInRange
+            boolean isInRange,
+            CallbackInfo ci
     ) {
-        nebHandleChunkTracking(player, pos, packetHolder, wasInRange, isInRange);
+        if (NEB_IN_SET_VIEW_DISTANCE.get()) {
+            nebHandleChunkTracking(player, pos, packetHolder, wasInRange, isInRange);
+
+            ci.cancel();
+        }
     }
 
+    @Unique
     private void nebHandleChunkTracking(
             ServerPlayer player,
             ChunkPos pos,

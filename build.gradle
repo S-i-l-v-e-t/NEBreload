@@ -102,6 +102,10 @@ repositories {
         url = 'https://repo1.maven.org/maven2/'
     }
 }
+configurations {
+    libraryToBundle
+    implementation.extendsFrom(libraryToBundle)
+}
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
@@ -111,7 +115,7 @@ dependencies {
     }
 
     // zstd-jni
-    implementation fg.deobf('com.github.luben:zstd-jni:1.5.5-5')
+    libraryToBundle 'com.github.luben:zstd-jni:1.5.5-5'
 
     // fastutil (already bundled with MC)
     // commons-io
@@ -143,6 +147,12 @@ tasks.named('processResources', ProcessResources).configure {
 }
 
 tasks.named('jar', Jar).configure {
+    from {
+        configurations.libraryToBundle.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    exclude 'META-INF/*.RSA', 'META-INF/*.SF', 'META-INF/*.DSA'
     manifest {
         attributes([
                 'Specification-Title'     : mod_id,

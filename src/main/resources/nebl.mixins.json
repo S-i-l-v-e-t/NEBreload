@@ -13,7 +13,9 @@
     "PacketDecoderMixin",
     "PacketEncoderMixin",
     "PlayerListMixin",
-    "ServerGamePacketListenerImplMixin"
+    "ServerGamePacketListenerImplMixin",
+    "ServerPayloadReleaseMixin",
+    "ClientPayloadReleaseMixin"
   ],
   "client": [],
   "injectors": {

@@ -9,6 +9,8 @@ import net.minecraft.network.ConnectionProtocol;
 import net.minecraft.network.PacketListener;
 import net.minecraft.network.PacketSendListener;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.PacketFlow;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -28,6 +30,7 @@ public abstract class ConnectionMixin {
     @Nullable
     private volatile PacketListener packetListener;
 
+
     @Shadow
     public abstract void send(Packet<?> packet, @Nullable PacketSendListener listener);
 
@@ -36,6 +39,24 @@ public abstract class ConnectionMixin {
 
     @Inject(method = "send(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketSendListener;)V", at = @At("HEAD"), cancellable = true)
     private void nebwPacketAggregate(Packet<?> packet, @Nullable PacketSendListener listener, CallbackInfo ci) {
+         // :< due to ysm is a closed source mod i cannot figure out where goes wrong cause the syncing process hanging, so just hardcoding to skip it
+        if (packet instanceof net.minecraft.network.protocol.game.ClientboundCustomPayloadPacket customPacket) {
+
+            net.minecraft.resources.ResourceLocation id = customPacket.getIdentifier();
+            String namespace = id.getNamespace();
+            if (namespace.equals("ysm") || namespace.equals("yes_steve_model")) {
+                return;
+            }
+        }
+
+        if (packet instanceof net.minecraft.network.protocol.game.ServerboundCustomPayloadPacket customPacket) {
+            net.minecraft.resources.ResourceLocation id = customPacket.getIdentifier();
+            String namespace = id.getNamespace();
+
+            if (namespace.equals("ysm") || namespace.equals("yes_steve_model")) {
+                return;
+            }
+        }
         // only work on play
         if (this.getRemoteAddress() instanceof LocalAddress) {
             return;
@@ -45,8 +66,10 @@ public abstract class ConnectionMixin {
         }
         // de-bundle: in Forge 1.20.1 BundlePacket exists as a vanilla concept
         // Attempt to detect bundle packets via class name (may not exist on all Forge 1.20.1 builds)
-        if (isBundlePacket(packet)) {
-            deBundlePacket(packet, listener);
+        if (packet instanceof net.minecraft.network.protocol.BundlePacket<?> bundlePacket) {
+            for (Packet<?> p : bundlePacket.subPackets()) {
+                this.send(p, listener);
+            }
             ci.cancel();
             return;
         }
@@ -64,34 +87,9 @@ public abstract class ConnectionMixin {
         ci.cancel();
     }
 
-    /**
-     * Check if this is a BundlePacket (vanilla 1.19.4+ bundle).
-     * We check by class name to avoid compile-time dependency issues.
-     */
-    private static boolean isBundlePacket(Packet<?> packet) {
-        return packet.getClass().getSimpleName().contains("Bundle");
-    }
 
     private static boolean isPlayPacket(Packet<?> packet) {
         return ConnectionProtocol.getProtocolForPacket(packet) == ConnectionProtocol.PLAY;
-    }
-
-    /**
-     * Expand a BundlePacket into individual sub-packets and re-send each.
-     */
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private void deBundlePacket(Packet<?> bundle, @Nullable PacketSendListener listener) {
-        try {
-            // BundlePacket has subPackets() method returning Iterable<Packet<?>>
-            var method = bundle.getClass().getMethod("subPackets");
-            Iterable<Packet<?>> subPackets = (Iterable<Packet<?>>) method.invoke(bundle);
-            for (Packet<?> p : subPackets) {
-                this.send(p, listener);
-            }
-        } catch (Exception e) {
-            // If we can't de-bundle, just skip aggregation and send normally
-            AggregationManager.flushConnection((Connection) (Object) this);
-        }
     }
 
 }

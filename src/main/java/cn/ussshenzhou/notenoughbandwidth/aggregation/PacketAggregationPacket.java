@@ -45,12 +45,16 @@ public class PacketAggregationPacket {
     // ---------------------------------------- encode ----------------------------------------
     private static final StackWalker WALKER = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
     private final ArrayList<AggregatedEncodePacket> packetsToEncode;
-    private final Connection connection;
+    private Connection connection;
 
     public PacketAggregationPacket(ArrayList<AggregatedEncodePacket> packetsToEncode, Connection connection) {
         this.packetsToEncode = packetsToEncode;
         this.connection = connection;
     }
+    public PacketAggregationPacket(FriendlyByteBuf buffer) {
+        this(buffer, null);
+    }
+
 
     /**
      * Encode all buffered sub-packets into {@code buffer}.
@@ -121,9 +125,9 @@ public class PacketAggregationPacket {
     // ---------------------------------------- decode ----------------------------------------
     private FriendlyByteBuf data;
 
-    public PacketAggregationPacket(FriendlyByteBuf buffer) {
+    public PacketAggregationPacket(FriendlyByteBuf buffer, Connection connection) {
         this.packetsToEncode = null;
-        this.connection = null;
+        this.connection = connection;
         // Retain a copy of the entire buffer; readerIndex of the source buffer is advanced
         this.data = new FriendlyByteBuf(buffer.retainedDuplicate());
         buffer.readerIndex(buffer.writerIndex());
@@ -135,6 +139,9 @@ public class PacketAggregationPacket {
     }
 
     public void handler(NetworkEvent.Context context) {
+        if (this.connection == null) {
+            this.connection = context.getNetworkManager();
+        }
         try {
             var packetsToHandle = decodeEntries();
 
@@ -189,7 +196,7 @@ public class PacketAggregationPacket {
         FriendlyByteBuf raw;
         if (compressed) {
             int rawSize = data.readVarInt();
-            raw = new FriendlyByteBuf(ZstdHelper.decompress(null, data.retainedDuplicate(), rawSize));
+            raw = new FriendlyByteBuf(ZstdHelper.decompress(connection, data.retainedDuplicate(), rawSize));
         } else {
             raw = new FriendlyByteBuf(data.retainedDuplicate());
         }
