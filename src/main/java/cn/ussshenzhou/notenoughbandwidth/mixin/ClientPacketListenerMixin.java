@@ -52,26 +52,11 @@ public class ClientPacketListenerMixin {
         PacketAggregationPacket aggregationPacket = new PacketAggregationPacket(packet.getData(),this.connection);
         ArrayList<Packet<?>> packets = aggregationPacket.decodeToPackets(PacketFlow.CLIENTBOUND);
         ClientGamePacketListener listener = (ClientGamePacketListener) (Object) this;
-        org.slf4j.Logger LOGGER = com.mojang.logging.LogUtils.getLogger();
         for (Packet<?> subPacket : packets) {
-
-            // 🌟 探针 1：在执行前拦截实体生成包，读取它的内存数据
-            if (subPacket instanceof net.minecraft.network.protocol.game.ClientboundAddEntityPacket addPkt) {
-                LOGGER.warn("[实体探针] 发现实体生成包! 准备生成: 类型={}, ID={}, 坐标=({} , {} , {})",
-                        addPkt.getType(), addPkt.getId(), addPkt.getX(), addPkt.getY(), addPkt.getZ());
-            }
-
             try {
-                // 照常执行
                 ((Packet<net.minecraft.network.protocol.game.ClientGamePacketListener>) subPacket).handle(listener);
-
-                // 🌟 探针 2：验证是否被静默丢弃
-                if (subPacket instanceof net.minecraft.network.protocol.game.ClientboundAddEntityPacket addPkt) {
-                    LOGGER.warn("[实体探针] 实体 ID: {} 的 handle() 方法已无异常执行完毕!", addPkt.getId());
                 }
-            } catch (Exception e) {
-                // 🌟 探针 3：抓出任何把实体包搞崩溃的罪魁祸首
-                LOGGER.error("[实体探针] ❌ 处理包 {} 时发生致命异常!", subPacket.getClass().getSimpleName(), e);
+            catch (Exception e) {
             }
         }
         ci.cancel();
